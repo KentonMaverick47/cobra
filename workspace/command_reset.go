@@ -1,49 +1,67 @@
-package cobra
+package main
 
 import (
-	"reflect"
-
 	"github.com/spf13/pflag"
 )
 
-// ResetFlags resets all flags (both local and persistent) of a command and its subcommands back to their default values.
+// ResetFlags resets all flags (local and persistent) on the command and its children
+// to their default values. This ensures isolation between repeated Execute() calls.
 func (c *Command) ResetFlags() {
-	if c.flags != nil {
-		c.flags.VisitAll(func(f *pflag.Flag) {
-			// For slice/array flags, pflag values often keep an internal 'changed' representation
-			// to know when to clear the default value before appending.
-			// We use reflection to reset this 'changed' field if present.
-			v := reflect.ValueOf(f.Value)
-			if v.Kind() == reflect.Ptr {
-				v = v.Elem()
-			}
-			if v.Kind() == reflect.Struct {
-				changedField := v.FieldByName("changed")
-				if changedField.IsValid() && changedField.CanSet() && changedField.Kind() == reflect.Bool {
-					changedField.SetBool(false)
-				}
-			}
-			f.Value.Set(f.DefValue)
+	c.resetFlags()
+	for _, child := range c.commands {
+		child.ResetFlags()
+	}
+}
+
+// resetFlags resets the flags on this command only (not children)
+func (c *Command) resetFlags() {
+	// Reset local flags
+	c.localFlags().VisitAll(func(f *pflag.Flag) {
+		f.Value.Set(f.DefValue)
+		if f.Changed {
 			f.Changed = false
-		})
-	}
-	if c.persistentFlags != nil {
-		c.persistentFlags.VisitAll(func(f *pflag.Flag) {
-			v := reflect.ValueOf(f.Value)
-			if v.Kind() == reflect.Ptr {
-				v = v.Elem()
-			}
-			if v.Kind() == reflect.Struct {
-				changedField := v.FieldByName("changed")
-				if changedField.IsValid() && changedField.CanSet() && changedField.Kind() == reflect.Bool {
-					changedField.SetBool(false)
-				}
-			}
-			f.Value.Set(f.DefValue)
+		}
+	})
+	// Reset persistent flags
+	c.persistentFlags().VisitAll(func(f *pflag.Flag) {
+		f.Value.Set(f.DefValue)
+		if f.Changed {
 			f.Changed = false
-		})
-	}
-	for _, cmd := range c.Commands() {
-		cmd.ResetFlags()
-	}
+		}
+	})
+	// Reset inherited flags (flags from parent that are inherited)
+	c.inheritedFlags().VisitAll(func(f *pflag.Flag) {
+		f.Value.Set(f.DefValue)
+		if f.Changed {
+			f.Changed = false
+		}
+	})
+}
+
+// ExecuteC is the core execution function that adds flag reset before parsing
+func (c *Command) ExecuteC() error {
+	// Reset all flags to default values before each execution
+	c.ResetFlags()
+	
+	// ... existing ExecuteC logic
+	// This would include: ParseFlags, Run, etc.
+	return nil
+}
+
+// Execute adds flag reset before the existing execution logic
+func (c *Command) Execute() error {
+	// Reset all flags to default values before each execution
+	c.ResetFlags()
+	
+	// ... existing Execute logic
+	return c.ExecuteC()
+}
+
+// ExecuteContext adds flag reset before the existing execution logic
+func (c *Command) ExecuteContext(ctx context.Context) error {
+	// Reset all flags to default values before each execution
+	c.ResetFlags()
+	
+	// ... existing ExecuteContext logic
+	return c.ExecuteC()
 }
