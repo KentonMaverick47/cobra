@@ -1,90 +1,37 @@
-package cobra
+package workspace
 
 import (
-	"bytes"
-	"testing"
+    "testing"
+    "github.com/spf13/cobra"
 )
 
-func TestResetFlags(t *testing.T) {
-	var host string
+func TestPersistentFlagLeakage(t *testing.T) {
+    var persistentVal string
 
-	rootCmd := &Command{
-		Use: "root",
-		Run: func(cmd *Command, args []string) {},
-	}
-	rootCmd.PersistentFlags().StringVar(&host, "host", "localhost", "host address")
+    rootCmd := &cobra.Command{Use: "root"}
+    rootCmd.PersistentFlags().StringVar(&persistentVal, "config", "default-path", "config file path")
 
-	subCmd := &Command{
-		Use: "sub",
-		Run: func(cmd *Command, args []string) {},
-	}
-	rootCmd.AddCommand(subCmd)
+    subCmd := &cobra.Command{
+        Use: "sub",
+        Run: func(cmd *cobra.Command, args []string) {},
+    }
+    rootCmd.AddCommand(subCmd)
 
-	// 1. Execute with --host remotehost
-	rootCmd.SetArgs([]string{"sub", "--host", "remotehost"})
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+    // First execution: Explicitly set the persistent flag
+    rootCmd.SetArgs([]string{"sub", "--config", "custom-path"})
+    if err := rootCmd.Execute(); err != nil {
+        t.Fatalf("First execution failed: %v", err)
+    }
+    if persistentVal != "custom-path" {
+        t.Errorf("Expected 'custom-path', got '%s'", persistentVal)
+    }
 
-	if host != "remotehost" {
-		t.Errorf("expected host to be 'remotehost', got '%s'", host)
-	}
-
-	// 2. Reset flags
-	rootCmd.ResetFlags()
-
-	// 3. Execute again with no arguments
-	rootCmd.SetArgs([]string{"sub"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if host != "localhost" {
-		t.Errorf("expected host to be reset to 'localhost', got '%s'", host)
-	}
-}
-
-func TestResetFlagsSlice(t *testing.T) {
-	var hosts []string
-
-	rootCmd := &Command{
-		Use: "root",
-		Run: func(cmd *Command, args []string) {},
-	}
-	rootCmd.PersistentFlags().StringSliceVar(&hosts, "hosts", []string{"localhost"}, "host addresses")
-
-	subCmd := &Command{
-		Use: "sub",
-		Run: func(cmd *Command, args []string) {},
-	}
-	rootCmd.AddCommand(subCmd)
-
-	// 1. Execute with --hosts remote1,remote2
-	rootCmd.SetArgs([]string{"sub", "--hosts", "remote1,remote2"})
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(hosts) != 2 || hosts[0] != "remote1" || hosts[1] != "remote2" {
-		t.Errorf("expected hosts to be [remote1, remote2], got %v", hosts)
-	}
-
-	// 2. Reset flags
-	rootCmd.ResetFlags()
-
-	// 3. Execute again with no arguments
-	rootCmd.SetArgs([]string{"sub"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(hosts) != 1 || hosts[0] != "localhost" {
-		t.Errorf("expected hosts to be reset to [localhost], got %v", hosts)
-	}
+    // Second execution: Do not set the persistent flag
+    rootCmd.SetArgs([]string{"sub"})
+    if err := rootCmd.Execute(); err != nil {
+        t.Fatalf("Second execution failed: %v", err)
+    }
+    if persistentVal != "default-path" {
+        t.Errorf("Expected flag to reset to 'default-path', but it leaked: '%s'", persistentVal)
+    }
 }
