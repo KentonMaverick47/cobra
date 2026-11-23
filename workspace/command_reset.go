@@ -10,9 +10,6 @@ import (
 func (c *Command) ResetFlags() {
 	if c.flags != nil {
 		c.flags.VisitAll(func(f *pflag.Flag) {
-			// For slice/array flags, pflag values often keep an internal 'changed' representation
-			// to know when to clear the default value before appending.
-			// We use reflection to reset this 'changed' field if present.
 			v := reflect.ValueOf(f.Value)
 			if v.Kind() == reflect.Ptr {
 				v = v.Elem()
